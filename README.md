@@ -1,23 +1,123 @@
-# AI-VISA-STATUS-MODULE-1
 import numpy as np
 import pandas as pd
+from datetime import datetime
 
-#reading csv file with real time dates
-df=pd.read_csv("visa_dataset.csv", parse_dates=['Application_Date','Decision_Date']) 
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+from sklearn.linear_model import LinearRegression
+file_path = "visa_processing_dataset_10k.csv"
+
+df = pd.read_csv(file_path)
+
+print("First 5 rows of dataset:")
+print(df.head())
+
+print("\nDataset Info:")
+print(df.info())
+
+print("\nMissing values count:")
 print(df.isnull().sum())
 
-#handling missing values
-df['Decision_Date'].fillna(df['Decision_Date'].mode()[0], inplace=True)
-df['Processing_Days'].fillna(df['Processing_Days'].mode()[0], inplace=True)
-df['Visa_Class'].fillna('Unknown',inplace=True)
-df['Gender'].fillna('Unknown',inplace=True)
-df['Applicant_Age'].fillna(round(df['Applicant_Age'].median()),inplace=True)
-df['Processing_Center'].fillna('Unknown',inplace=True)
-df['Case_Status'].fillna('Unknown',inplace=True)
 
-#adding application month as an attribute
-df['Application_Month']=df['Application_Date'].dt.month_name()
-df.to_csv('visa_dataset.csv',index=False)
+df["application_date"].fillna(df["application_date"].mode()[0], inplace=True)
+df["decision_date"].fillna(df["decision_date"].mode()[0], inplace=True)
 
-#encoding the dataset 
-df_encoded=pd.get_dummies(df, columns=['Visa_Type','Visa_Class','Gender','Applicant_Country','Visa_Country','Processing_Center','Case_Status'])
+df["country"].fillna("Unknown", inplace=True)
+df["visa_type"].fillna("Unknown", inplace=True)
+df["processing_office"].fillna("Unknown", inplace=True)
+
+
+
+df["application_date"] = pd.to_datetime(df["application_date"])
+df["decision_date"] = pd.to_datetime(df["decision_date"])
+
+
+df["processing_days"] = (df["decision_date"] - df["application_date"]).dt.days
+
+print("\nAfter calculating processing days:")
+print(df.head())
+
+
+df_encoded = pd.get_dummies(
+    df,
+    columns=["country", "visa_type", "processing_office"],
+    drop_first=True
+)
+
+print("\nEncoded DataFrame:")
+print(df_encoded.head())
+
+
+X = df_encoded.drop(
+    columns=["processing_days", "application_date", "decision_date"]
+)
+y = df_encoded["processing_days"]
+
+
+model = LinearRegression()
+model.fit(X, y)
+
+print("\nModel training completed")
+
+
+sample_input = X.iloc[0].values.reshape(1, -1)
+
+predicted_days = model.predict(sample_input)
+print("Predicted Processing Time:", predicted_days[0], "days")
+
+
+
+print("\nStatistical Summary of Processing Days:")
+print(df["processing_days"].describe())
+
+sns.histplot(df["processing_days"], kde=True)
+plt.title("Distribution of Visa Processing Days")
+plt.xlabel("Processing Days")
+plt.ylabel("Count")
+plt.show()
+
+sns.boxplot(x=df["processing_days"])
+plt.title("Boxplot of Processing Days")
+plt.show()
+df["application_month"] = df["application_date"].dt.month
+print(df[["application_date", "application_month"]].head())
+
+df["season"] = df["application_month"].apply(
+    lambda x: "Peak" if x in [1, 2, 12] else "Off-Peak"
+)
+
+print(df[["application_month", "season"]].head())
+
+country_avg = df.groupby("country")["processing_days"].mean()
+df["country_avg"] = df["country"].map(country_avg)
+
+print("\nCountry-wise average processing days:")
+print(country_avg.head())
+
+visa_avg = df.groupby("visa_type")["processing_days"].mean()
+df["visa_avg"] = df["visa_type"].map(visa_avg)
+
+print("\nVisa-type average processing days:")
+print(visa_avg)
+
+
+corr_matrix = df[
+    ["processing_days", "application_month", "country_avg", "visa_avg"]
+].corr()
+
+print("\nCorrelation Matrix:")
+print(corr_matrix)
+
+
+sns.heatmap(corr_matrix, annot=True, cmap="coolwarm")
+plt.title("Correlation Heatmap")
+plt.show()
+
+sns.scatterplot(
+    x="application_month",
+    y="processing_days",
+    data=df
+)
+plt.title("Processing Days vs Application Month")
+plt.show()
